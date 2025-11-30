@@ -16,8 +16,6 @@ class AlarmService {
   factory AlarmService() => _instance;
 
   final NotificationService _notificationService = NotificationService();
-  final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
 
   // Clave para guardar el mapeo de IDs de medicamentos a IDs de alarmas
   static const String ALARM_MAPPING_KEY = 'ALARM_MAPPING';

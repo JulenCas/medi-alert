@@ -292,8 +292,6 @@ class MedicationProvider extends ChangeNotifier {
       return;
     }
 
-    final now = DateTime.now();
-
     try {
       // Intentar programar alarmas nativas primero
       final hasAlarmPermission = await alarmService.checkExactAlarmPermission();
