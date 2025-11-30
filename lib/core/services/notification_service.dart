@@ -1,15 +1,18 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:medialert/domain/entities/medication.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-
-import '../../data/models/medicine.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
   static bool _initialized = false;
+
+  Future<void> init() async {
+    await initialize();
+  }
 
   // Inicializar el servicio de notificaciones
   static Future<void> initialize() async {
@@ -43,19 +46,82 @@ class NotificationService {
     _initialized = true;
   }
 
-  // Manejar cuando se toca una notificación
-  static void _onNotificationTapped(NotificationResponse response) {
-    // Aquí puedes navegar a una pantalla específica
-    print('Notificación tocada: ${response.payload}');
+  Future<bool> isNotificationPermissionEnabled() async {
+    final status = await Permission.notification.status;
+    return status.isGranted;
   }
 
-  // Solicitar permisos de notificación
-  static Future<bool> requestPermissions() async {
+  Future<bool> requestNotificationPermission() async {
+    await initialize();
     if (await Permission.notification.isDenied) {
       final status = await Permission.notification.request();
       return status == PermissionStatus.granted;
     }
     return true;
+  }
+
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    if (!enabled) {
+      await cancelAllReminders();
+    }
+  }
+
+  /// Programa un recordatorio para una medicación específica.
+  Future<void> scheduleMedicationReminder(
+      Medication medication, DateTime scheduledTime) async {
+    await initialize();
+
+    await _notifications.zonedSchedule(
+      _generateId(medication.id, scheduledTime.millisecondsSinceEpoch),
+      'Recordatorio de medicación',
+      'Es hora de tomar ${medication.name} (${medication.dosage})',
+      tz.TZDateTime.from(scheduledTime, tz.local),
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'medicine_channel',
+          'Recordatorios de Medicina',
+          channelDescription: 'Notificaciones para recordar tomar medicinas',
+          importance: Importance.high,
+          priority: Priority.high,
+          showWhen: true,
+          enableVibration: true,
+          playSound: true,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      payload: 'medication:${medication.id}',
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    );
+  }
+
+  /// Cancela todos los recordatorios asociados a una medicación concreta.
+  Future<void> cancelMedicationReminder(String medicationId) async {
+    await initialize();
+
+    final pendingNotifications =
+        await _notifications.pendingNotificationRequests();
+
+    for (final notification in pendingNotifications) {
+      if (notification.payload?.contains('medication:$medicationId') == true) {
+        await _notifications.cancel(notification.id);
+      }
+    }
+  }
+
+  /// Cancela todas las notificaciones programadas.
+  Future<void> cancelAllReminders() async {
+    await initialize();
+    await _notifications.cancelAll();
+  }
+
+  // Manejar cuando se toca una notificación
+  static void _onNotificationTapped(NotificationResponse response) {
+    // Aquí puedes navegar a una pantalla específica
+    print('Notificación tocada: ${response.payload}');
   }
 
   // Programar notificación única
@@ -66,6 +132,7 @@ class NotificationService {
     required DateTime scheduledTime,
     String? payload,
   }) async {
+    await initialize();
     await _notifications.zonedSchedule(
       id,
       title,
@@ -89,8 +156,6 @@ class NotificationService {
         ),
       ),
       payload: payload,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
   }
@@ -143,12 +208,13 @@ class NotificationService {
   }
 
   // Generar ID único para cada notificación
-  static int _generateId(String medicineName, int index) {
-    return '${medicineName.hashCode}$index'.hashCode.abs();
+  static int _generateId(String reference, int index) {
+    return '$reference$index'.hashCode.abs();
   }
 
   // Cancelar notificaciones de una medicina específica
   static Future<void> cancelMedicineNotifications(String medicineName) async {
+    await initialize();
     final pendingNotifications =
         await _notifications.pendingNotificationRequests();
 
@@ -161,12 +227,14 @@ class NotificationService {
 
   // Cancelar todas las notificaciones
   static Future<void> cancelAllNotifications() async {
+    await initialize();
     await _notifications.cancelAll();
   }
 
   // Obtener notificaciones pendientes
   static Future<List<PendingNotificationRequest>>
       getPendingNotifications() async {
+    await initialize();
     return await _notifications.pendingNotificationRequests();
   }
 
@@ -176,6 +244,7 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
+    await initialize();
     await _notifications.show(
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
       title,
